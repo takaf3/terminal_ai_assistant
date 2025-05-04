@@ -58,6 +58,8 @@ class AgenticAssistant:
     def __init__(self, python_autopilot=False, config_path=None, model_override=None, base_url_override=None):
         # Load configuration from config.yaml if exists
         self.config = load_config(config_path)
+        # Store config_path for use by tools
+        self.config_path = config_path
         
         self.mcp_client = MCPClient()
         # Get debug mode from configuration
@@ -157,7 +159,7 @@ class AgenticAssistant:
                 "type": "function",
                 "function": {
                     "name": "memory_tool",
-                    "description": "Store and retrieve information about the user in a persistent memory file. Use this to remember user facts, preferences, important dates, and world facts.",
+                    "description": "Store and retrieve information using the assistant's vector memory. This allows semantic search and better recall of information about the user, preferences, dates, and facts.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -196,7 +198,7 @@ class AgenticAssistant:
                             },
                             "query": {
                                 "type": "string",
-                                "description": "The query to search for in the agent's memory (for search operation)"
+                                "description": "The query to search for semantically similar information in the agent's memory (for search operation)"
                             }
                         },
                         "required": ["operation"]
@@ -378,7 +380,9 @@ class AgenticAssistant:
                     "- You can install and use Python packages when needed\n"
                     "- When executing system commands, always use Python's subprocess or os modules via the python_repl tool\n"
                     "- Use the memory_tool to remember important facts about the user, their preferences, important dates, and general facts about the world\n"
-                    "- Before asking for information the user has already shared, check the memory using memory_tool with 'search' operation"
+                    "- The memory system uses a vector database (ChromaDB) for semantic search, allowing you to find related information even when queries don't exactly match stored information\n"
+                    "- Before asking for information the user has already shared, check the memory using memory_tool with 'search' operation to find semantically similar information\n"
+                    "- When the user shares important information, always use memory_tool to store it for future reference"
                 )
             }
             
@@ -543,46 +547,18 @@ class AgenticAssistant:
                         full_response += f"\nTool result: {tool_result}\n"
                     
                     elif function_name == "memory_tool":
+                        yield f"[TOOL_START]: memory_tool"
                         try:
                             args = json.loads(tool_call["function"]["arguments"])
-                            operation = args.get("operation", "")
-                            
-                            # Build kwargs based on the operation
-                            kwargs = {}
-                            if operation == "add_fact":
-                                kwargs["fact"] = args.get("fact", "")
-                            elif operation == "add_preference":
-                                kwargs["category"] = args.get("category", "")
-                                kwargs["key"] = args.get("key", "")
-                                kwargs["value"] = args.get("value", "")
-                            elif operation == "add_date":
-                                kwargs["description"] = args.get("description", "")
-                                kwargs["date"] = args.get("date", "")
-                            elif operation == "add_world_fact":
-                                kwargs["world_fact"] = args.get("world_fact", "")
-                            elif operation == "search":
-                                kwargs["query"] = args.get("query", "")
-                        except (json.JSONDecodeError, AttributeError) as e:
-                            operation = "error"
-                            kwargs = {}
-                        
-                        yield f"[TOOL_START]: memory_tool ({operation})"
-                        try:
-                            result = memory_tool(operation, **kwargs)
-                            if "error" in result:
-                                tool_result = f"Memory operation error: {result['error']}"
-                            elif operation == "get":
-                                formatted_memory = json.dumps(result, indent=2)
-                                tool_result = f"Current memory contents:\n\n{formatted_memory}"
-                            elif operation == "search":
-                                if "message" in result:
-                                    tool_result = result["message"]
-                                else:
-                                    tool_result = "Memory search completed."
-                            else:
-                                tool_result = result.get("message", "Operation completed.")
+                            # Pass additional parameters to memory_tool
+                            args["debug"] = self.debug_mode
+                            args["config_path"] = self.config_path
+                            tool_result = memory_tool(**args)
+                            # Convert the result to a string if it's not already
+                            if isinstance(tool_result, dict):
+                                tool_result = json.dumps(tool_result, indent=2)
                         except Exception as e:
-                            tool_result = f"Error executing memory tool: {str(e)}"
+                            tool_result = f"Memory tool error: {str(e)}"
                         
                         time.sleep(1.5)
                         yield f"[TOOL_END]"

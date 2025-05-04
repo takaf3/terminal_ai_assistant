@@ -1,268 +1,145 @@
 import os
 import json
+import time
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Any, Optional
+from .vector_memory import VectorMemory
 
-# Memory file path
-MEMORY_DIR = Path(os.path.expanduser("~/.terminal_assistant"))
-MEMORY_FILE = MEMORY_DIR / "user_memory.json"
+# Global vector memory instance
+vector_memory = None
 
-def ensure_memory_file_exists():
-    """Ensure memory directory and file exist"""
-    MEMORY_DIR.mkdir(exist_ok=True, parents=True)
+def get_vector_memory(debug=False, config_path=None) -> VectorMemory:
+    """
+    Get or create the vector memory instance.
     
-    if not MEMORY_FILE.exists():
-        with open(MEMORY_FILE, 'w') as f:
-            json.dump({
-                "user_facts": [],
-                "world_facts": [],
-                "preferences": {},
-                "history": {
-                    "important_dates": {},
-                    "conversations": []
-                },
-                "created_at": datetime.now().isoformat(),
-                "last_updated": datetime.now().isoformat()
-            }, f, indent=2)
+    Args:
+        debug: Enable debug output
+        config_path: Path to configuration file
     
-    return MEMORY_FILE
+    Returns:
+        VectorMemory instance
+    """
+    global vector_memory
+    
+    if vector_memory is None:
+        vector_memory = VectorMemory(debug=debug, config_path=config_path)
+    
+    return vector_memory
 
-def get_memory():
-    """Read and return the current memory"""
-    ensure_memory_file_exists()
+def memory_tool(operation: str, fact: Optional[str] = None, category: Optional[str] = None, 
+                key: Optional[str] = None, value: Optional[str] = None, 
+                description: Optional[str] = None, date: Optional[str] = None, 
+                world_fact: Optional[str] = None, query: Optional[str] = None,
+                debug: bool = False, config_path: Optional[str] = None) -> str:
+    """
+    Memory tool that provides persistent memory capabilities for the agent.
     
+    Args:
+        operation: Operation to perform: get, add_fact, add_preference, add_date, add_world_fact, search
+        fact: Fact about the user to remember
+        category: Category for preference
+        key: Key for preference
+        value: Value for preference
+        description: Description of important date
+        date: Date string
+        world_fact: Fact about the world
+        query: Search query
+        debug: Enable debug output
+        config_path: Path to configuration file
+    
+    Returns:
+        Result of the operation
+    """
     try:
-        with open(MEMORY_FILE, 'r') as f:
-            memory_data = json.load(f)
-            # Ensure world_facts exists even in older memory files
-            if "world_facts" not in memory_data:
-                memory_data["world_facts"] = []
-            return memory_data
+        # Initialize the vector memory
+        vm = get_vector_memory(debug=debug, config_path=config_path)
+        
+        if operation == "get":
+            # Get all memories
+            result = []
+            
+            # Get user facts
+            facts = vm.get_all_memories("facts")
+            if facts:
+                result.append("User Facts:")
+                for doc in facts:
+                    result.append(f"- {doc.page_content}")
+            
+            # Get preferences
+            preferences = vm.get_all_memories("preferences")
+            if preferences:
+                result.append("\nUser Preferences:")
+                for doc in preferences:
+                    result.append(f"- {doc.page_content}")
+            
+            # Get important dates
+            dates = vm.get_all_memories("dates")
+            if dates:
+                result.append("\nImportant Dates:")
+                for doc in dates:
+                    result.append(f"- {doc.page_content}")
+            
+            # Get world facts
+            world_facts = vm.get_all_memories("world_facts")
+            if world_facts:
+                result.append("\nWorld Facts:")
+                for doc in world_facts:
+                    result.append(f"- {doc.page_content}")
+            
+            if not result:
+                return "No memories found."
+            
+            return "\n".join(result)
+        
+        elif operation == "add_fact":
+            if not fact:
+                return "Error: No fact provided."
+            
+            doc_id = vm.add_fact(fact)
+            return f"Fact added to memory: {fact}"
+        
+        elif operation == "add_preference":
+            if not category or not key or not value:
+                return "Error: Missing category, key, or value for preference."
+            
+            doc_id = vm.add_preference(category, key, value)
+            return f"Preference added to memory: {category}/{key}={value}"
+        
+        elif operation == "add_date":
+            if not description or not date:
+                return "Error: Missing description or date."
+            
+            doc_id = vm.add_date(description, date)
+            return f"Important date added to memory: {description} - {date}"
+        
+        elif operation == "add_world_fact":
+            if not world_fact:
+                return "Error: No world fact provided."
+            
+            doc_id = vm.add_world_fact(world_fact)
+            return f"World fact added to memory: {world_fact}"
+        
+        elif operation == "search":
+            if not query:
+                return "Error: No search query provided."
+            
+            results = vm.search(query)
+            
+            if not results:
+                return f"No memories found matching '{query}'."
+            
+            result_texts = [f"Memory search results for '{query}':"]
+            
+            for doc, score in results:
+                # Round score to 4 decimal places for readability
+                score_rounded = round(score, 4)
+                result_texts.append(f"- [{score_rounded}] {doc.page_content}")
+            
+            return "\n".join(result_texts)
+        
+        else:
+            return f"Error: Unknown operation '{operation}'. Valid operations: get, add_fact, add_preference, add_date, add_world_fact, search."
+    
     except Exception as e:
-        print(f"Error reading memory file: {str(e)}")
-        return {
-            "user_facts": [],
-            "world_facts": [],
-            "preferences": {},
-            "history": {
-                "important_dates": {},
-                "conversations": []
-            },
-            "created_at": datetime.now().isoformat(),
-            "last_updated": datetime.now().isoformat()
-        }
-
-def save_memory(memory_data):
-    """Save the memory to disk"""
-    ensure_memory_file_exists()
-    
-    # Update the last_updated timestamp
-    memory_data["last_updated"] = datetime.now().isoformat()
-    
-    try:
-        with open(MEMORY_FILE, 'w') as f:
-            json.dump(memory_data, f, indent=2)
-        return True
-    except Exception as e:
-        print(f"Error saving memory file: {str(e)}")
-        return False
-
-def add_user_fact(fact):
-    """Add a new fact about the user"""
-    memory = get_memory()
-    
-    # Add the new fact with timestamp
-    memory["user_facts"].append({
-        "fact": fact,
-        "added_at": datetime.now().isoformat()
-    })
-    
-    return save_memory(memory)
-
-def add_world_fact(fact):
-    """Add a new fact about the world"""
-    memory = get_memory()
-    
-    # Add the new fact with timestamp
-    memory["world_facts"].append({
-        "fact": fact,
-        "added_at": datetime.now().isoformat()
-    })
-    
-    return save_memory(memory)
-
-def add_user_preference(category, preference):
-    """Add or update a user preference"""
-    memory = get_memory()
-    
-    if category not in memory["preferences"]:
-        memory["preferences"][category] = {}
-    
-    memory["preferences"][category].update(preference)
-    
-    return save_memory(memory)
-
-def add_important_date(description, date_str):
-    """Add an important date to remember"""
-    memory = get_memory()
-    
-    memory["history"]["important_dates"][description] = {
-        "date": date_str,
-        "added_at": datetime.now().isoformat()
-    }
-    
-    return save_memory(memory)
-
-def search_memory(query):
-    """Search the memory for specific information"""
-    memory = get_memory()
-    results = []
-    
-    # Convert query to lowercase for case-insensitive search
-    query_lower = query.lower()
-    
-    # Special handling for common queries
-    is_name_query = any(term in query_lower for term in ["name", "call me", "who am i"])
-    is_birthday_query = any(term in query_lower for term in ["birthday", "born", "birth date"])
-    is_preference_query = any(term in query_lower for term in ["like", "prefer", "favorite", "preference"])
-    
-    # Extract keywords from query
-    keywords = [word.strip() for word in query_lower.split() if len(word.strip()) > 2]
-    
-    # Search user facts
-    for fact in memory["user_facts"]:
-        fact_lower = fact["fact"].lower()
-        
-        # Direct match
-        if query_lower in fact_lower:
-            results.append(("User fact", fact["fact"]))
-            continue
-            
-        # Special case for name queries
-        if is_name_query and any(name_word in fact_lower for name_word in ["name", "call", "called"]):
-            results.append(("User fact", fact["fact"]))
-            continue
-            
-        # Keyword matching
-        if any(keyword in fact_lower for keyword in keywords):
-            results.append(("User fact", fact["fact"]))
-            continue
-    
-    # Search world facts
-    for fact in memory["world_facts"]:
-        fact_lower = fact["fact"].lower()
-        
-        # Direct match
-        if query_lower in fact_lower:
-            results.append(("World fact", fact["fact"]))
-            continue
-            
-        # Keyword matching
-        if any(keyword in fact_lower for keyword in keywords):
-            results.append(("World fact", fact["fact"]))
-    
-    # Search user preferences
-    for category, prefs in memory["preferences"].items():
-        for key, value in prefs.items():
-            pref_text = f"{category}: {key} = {value}".lower()
-            
-            # Direct match
-            if query_lower in pref_text:
-                results.append(("Preference", f"{category}: {key} = {value}"))
-                continue
-                
-            # Special case for preference queries
-            if is_preference_query and (
-                any(keyword in key.lower() for keyword in keywords) or 
-                any(keyword in str(value).lower() for keyword in keywords)
-            ):
-                results.append(("Preference", f"{category}: {key} = {value}"))
-                continue
-            
-            # Keyword matching
-            if any(keyword in pref_text for keyword in keywords):
-                results.append(("Preference", f"{category}: {key} = {value}"))
-    
-    # Search important dates
-    for desc, date_info in memory["history"]["important_dates"].items():
-        date_text = f"{desc}: {date_info['date']}".lower()
-        
-        # Direct match
-        if query_lower in date_text:
-            results.append(("Important date", f"{desc}: {date_info['date']}"))
-            continue
-            
-        # Special case for birthday queries
-        if is_birthday_query and "birthday" in desc.lower():
-            results.append(("Important date", f"{desc}: {date_info['date']}"))
-            continue
-            
-        # Keyword matching
-        if any(keyword in date_text for keyword in keywords):
-            results.append(("Important date", f"{desc}: {date_info['date']}"))
-    
-    return results
-
-def memory_tool(operation, **kwargs):
-    """Main function to interact with the memory system"""
-    if operation == "get":
-        return get_memory()
-    
-    elif operation == "add_fact":
-        fact = kwargs.get("fact", "")
-        if not fact:
-            return {"error": "No fact provided"}
-        
-        success = add_user_fact(fact)
-        return {"success": success, "message": "User fact added to memory"}
-    
-    elif operation == "add_world_fact":
-        fact = kwargs.get("world_fact", "")
-        if not fact:
-            return {"error": "No world fact provided"}
-        
-        success = add_world_fact(fact)
-        return {"success": success, "message": "World fact added to memory"}
-    
-    elif operation == "add_preference":
-        category = kwargs.get("category", "")
-        preference_key = kwargs.get("key", "")
-        preference_value = kwargs.get("value", "")
-        
-        if not category or not preference_key:
-            return {"error": "Category and preference key required"}
-        
-        success = add_user_preference(category, {preference_key: preference_value})
-        return {"success": success, "message": f"User preference added to memory: {category}/{preference_key}"}
-    
-    elif operation == "add_date":
-        description = kwargs.get("description", "")
-        date = kwargs.get("date", "")
-        
-        if not description or not date:
-            return {"error": "Description and date required"}
-        
-        success = add_important_date(description, date)
-        return {"success": success, "message": f"Important date added to memory: {description}"}
-    
-    elif operation == "search":
-        query = kwargs.get("query", "")
-        
-        if not query:
-            return {"error": "Search query required"}
-        
-        results = search_memory(query)
-        
-        if not results:
-            return {"success": True, "message": "No results found in memory for the query.", "results": []}
-        
-        # Format results more clearly
-        formatted_results = "\n".join([f"- {category}: {details}" for category, details in results])
-        return {
-            "success": True, 
-            "message": f"Memory search results:\n\n{formatted_results}", 
-            "results": results
-        }
-    
-    else:
-        return {"error": f"Unknown operation: {operation}"} 
+        return f"Error using memory tool: {str(e)}" 

@@ -6,7 +6,8 @@ A command-line AI assistant with agentic capabilities, using LangChain/LangGraph
 - Command-line interface for conversations and commands
 - Agentic workflow orchestration using LangChain/LangGraph
 - MCP client for easy tool/plugin integration
-- Persistent memory using the MCP memory server (optional), enabling the assistant to remember user facts and context over time
+- Semantic vector memory using ChromaDB for more natural memory storage and retrieval
+- Persistent memory using vector search, enabling the assistant to remember user facts and context over time with better recall
 - "Thinking..." animation while waiting for responses from reasoning models (e.g., o1, o4)
 - Web search capability using Tavily Search API (default), Exa.ai API, and Brave Search API
 - Dice rolling tool for simple probability simulation
@@ -65,6 +66,13 @@ A command-line AI assistant with agentic capabilities, using LangChain/LangGraph
         include_answer: true
         include_images: false
         include_raw_content: false
+        
+    # Vector Memory Settings
+    memory:
+      enabled: true
+      embedding_model: "text-embedding-3-small"
+      persist_directory: "~/.terminal_assistant/vector_memory"  # Directory to store ChromaDB data
+      top_k_results: 5  # Number of results to return from memory searches
     
     # Debug Settings
     debug: false
@@ -111,6 +119,8 @@ A command-line AI assistant with agentic capabilities, using LangChain/LangGraph
 - `src/exa_client.py`: Client for Exa.ai web search API
 - `src/brave_client.py`: Client for Brave Search API
 - `src/tavily_client.py`: Client for Tavily Search API
+- `src/memory_utils.py`: Memory utility functions for persistent memory
+- `src/vector_memory.py`: Vector memory implementation using ChromaDB
 - `.gitignore`: Standard Python git ignore file
 - `requirements.txt`: Python dependencies
 - `README.md`: This file
@@ -156,6 +166,13 @@ tavily:
     include_images: false
     include_raw_content: false
 
+# Vector Memory Settings
+memory:
+  enabled: true
+  embedding_model: "text-embedding-3-small"
+  persist_directory: "~/.terminal_assistant/vector_memory"  # Directory to store ChromaDB data
+  top_k_results: 5  # Number of results to return from memory searches
+
 # Debug Settings
 debug: false
 
@@ -192,7 +209,7 @@ The assistant comes with the following built-in tools:
    - Example: "Use Brave to search for information about climate change"
    - Example: "Brave search for restaurants in Tokyo"
 
-5. **memory_tool**: Store and retrieve persistent information about the user
+5. **memory_tool**: Store and retrieve persistent information about the user using semantic vector search
    - Example: "Remember that I prefer dark chocolate over milk chocolate"
    - Example: "Remember my birthday is on June 15th"
    - Example: "What do you know about my food preferences?"
@@ -201,7 +218,34 @@ The assistant comes with the following built-in tools:
      - **add_fact**: Add a fact about the user
      - **add_preference**: Add a user preference
      - **add_date**: Add an important date
-     - **search**: Search memory for specific information
+     - **add_world_fact**: Add a fact about the world
+     - **search**: Search memory semantically for specific information
+
+## Vector Memory System
+The assistant uses ChromaDB as a vector database for more natural memory storage and retrieval:
+
+- **Semantic Search**: Finds information based on meaning, not just exact keywords
+- **Multiple Memory Collections**: Organizes memories into collections for facts, preferences, dates, etc.
+- **Persistent Storage**: Memories are stored in a local database in the user's home directory (`~/.terminal_assistant/vector_memory`) for long-term retention
+- **Metadata Support**: Each memory item includes metadata for better filtering and organization
+
+### Memory Storage Structure
+The vector memory system uses the following collections:
+- **user_facts**: Facts about the user
+- **user_preferences**: User preferences in different categories
+- **important_dates**: Important dates to remember
+- **world_facts**: Facts about the world
+- **general_memory**: General information not fitting the other categories
+
+### Customizing Storage Location
+You can customize the vector memory storage location by modifying the `persist_directory` setting in your `config.yaml` file:
+
+```yaml
+memory:
+  persist_directory: "/path/to/your/preferred/location"
+```
+
+This allows you to store the vector database in any location of your choice.
 
 ## Roadmap
 - Extensible tool/plugin system

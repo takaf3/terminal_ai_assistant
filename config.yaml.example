@@ -28,6 +28,13 @@ tavily:
     include_images: false
     include_raw_content: false
 
+# Vector Memory Settings
+memory:
+  enabled: true
+  embedding_model: "text-embedding-3-small"
+  persist_directory: "~/.terminal_assistant/vector_memory"  # Directory to store ChromaDB data
+  top_k_results: 5  # Number of results to return from memory searches
+
 # Debug Settings
 debug: false
 
