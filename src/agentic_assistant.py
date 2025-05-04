@@ -157,18 +157,22 @@ class AgenticAssistant:
                 "type": "function",
                 "function": {
                     "name": "memory_tool",
-                    "description": "Store and retrieve information about the user in a persistent memory file. Use this to remember user facts, preferences, and important dates.",
+                    "description": "Store and retrieve information about the user in a persistent memory file. Use this to remember user facts, preferences, important dates, and world facts.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "operation": {
                                 "type": "string",
-                                "description": "The operation to perform on memory: get, add_fact, add_preference, add_date, search",
-                                "enum": ["get", "add_fact", "add_preference", "add_date", "search"]
+                                "description": "The operation to perform on memory: get, add_fact, add_preference, add_date, add_world_fact, search",
+                                "enum": ["get", "add_fact", "add_preference", "add_date", "add_world_fact", "search"]
                             },
                             "fact": {
                                 "type": "string",
                                 "description": "A fact about the user to remember (for add_fact operation)"
+                            },
+                            "world_fact": {
+                                "type": "string",
+                                "description": "A fact about the world to remember (for add_world_fact operation)"
                             },
                             "category": {
                                 "type": "string",
@@ -344,7 +348,7 @@ class AgenticAssistant:
             # Create system message with current time and tool capabilities
             tools_description = "- dice_roll: Roll a dice with a specified number of sides\n"
             tools_description += "- python_repl: Execute Python code including OS commands via subprocess/os modules, file operations, package installation, and various system tasks\n"
-            tools_description += "- memory_tool: Store and retrieve persistent information about the user such as facts, preferences, and important dates\n"
+            tools_description += "- memory_tool: Store and retrieve persistent information about the user such as facts, preferences, important dates, and world facts\n"
             tools_description += "- tavily_search: Search the web for information using Tavily Search with AI-generated summaries (preferred web search tool)\n"
             if self.has_exa_search:
                 tools_description += "- web_search: Search the web for information using Exa\n"
@@ -371,7 +375,7 @@ class AgenticAssistant:
                     "- You can create, read, and manipulate files using Python's file handling capabilities\n"
                     "- You can install and use Python packages when needed\n"
                     "- When executing system commands, always use Python's subprocess or os modules via the python_repl tool\n"
-                    "- Use the memory_tool to remember important facts about the user, their preferences, and important dates\n"
+                    "- Use the memory_tool to remember important facts about the user, their preferences, important dates, and general facts about the world\n"
                     "- Before asking for information the user has already shared, check the memory using memory_tool with 'search' operation"
                 )
             }
@@ -625,6 +629,8 @@ class AgenticAssistant:
                         elif operation == "add_date":
                             kwargs["description"] = args.get("description", "")
                             kwargs["date"] = args.get("date", "")
+                        elif operation == "add_world_fact":
+                            kwargs["world_fact"] = args.get("world_fact", "")
                         elif operation == "search":
                             kwargs["query"] = args.get("query", "")
                     except (json.JSONDecodeError, AttributeError) as e:

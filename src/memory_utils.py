@@ -15,6 +15,7 @@ def ensure_memory_file_exists():
         with open(MEMORY_FILE, 'w') as f:
             json.dump({
                 "user_facts": [],
+                "world_facts": [],
                 "preferences": {},
                 "history": {
                     "important_dates": {},
@@ -32,11 +33,16 @@ def get_memory():
     
     try:
         with open(MEMORY_FILE, 'r') as f:
-            return json.load(f)
+            memory_data = json.load(f)
+            # Ensure world_facts exists even in older memory files
+            if "world_facts" not in memory_data:
+                memory_data["world_facts"] = []
+            return memory_data
     except Exception as e:
         print(f"Error reading memory file: {str(e)}")
         return {
             "user_facts": [],
+            "world_facts": [],
             "preferences": {},
             "history": {
                 "important_dates": {},
@@ -67,6 +73,18 @@ def add_user_fact(fact):
     
     # Add the new fact with timestamp
     memory["user_facts"].append({
+        "fact": fact,
+        "added_at": datetime.now().isoformat()
+    })
+    
+    return save_memory(memory)
+
+def add_world_fact(fact):
+    """Add a new fact about the world"""
+    memory = get_memory()
+    
+    # Add the new fact with timestamp
+    memory["world_facts"].append({
         "fact": fact,
         "added_at": datetime.now().isoformat()
     })
@@ -108,6 +126,11 @@ def search_memory(query):
         if query_lower in fact["fact"].lower():
             results.append(("User fact", fact["fact"]))
     
+    # Search world facts
+    for fact in memory["world_facts"]:
+        if query_lower in fact["fact"].lower():
+            results.append(("World fact", fact["fact"]))
+    
     # Search user preferences
     for category, prefs in memory["preferences"].items():
         for key, value in prefs.items():
@@ -133,6 +156,14 @@ def memory_tool(operation, **kwargs):
         
         success = add_user_fact(fact)
         return {"success": success, "message": "User fact added to memory"}
+    
+    elif operation == "add_world_fact":
+        fact = kwargs.get("world_fact", "")
+        if not fact:
+            return {"error": "No world fact provided"}
+        
+        success = add_world_fact(fact)
+        return {"success": success, "message": "World fact added to memory"}
     
     elif operation == "add_preference":
         category = kwargs.get("category", "")
