@@ -200,7 +200,7 @@ def main():
                 # Check if this is a tool execution marker
                 if chunk.startswith("[TOOL_START]"):
                     # Extract the tool name
-                    tool_parts = chunk.split(":")
+                    tool_parts = chunk.split(":", 1)  # Split at first : only
                     if len(tool_parts) > 1:
                         current_tool_name = tool_parts[1].strip()
                     else:

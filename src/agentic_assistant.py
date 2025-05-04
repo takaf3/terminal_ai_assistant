@@ -547,9 +547,10 @@ class AgenticAssistant:
                         full_response += f"\nTool result: {tool_result}\n"
                     
                     elif function_name == "memory_tool":
-                        yield f"[TOOL_START]: memory_tool"
                         try:
                             args = json.loads(tool_call["function"]["arguments"])
+                            operation = args.get("operation", "unknown")
+                            yield f"[TOOL_START]: memory_tool ({operation})"
                             # Pass additional parameters to memory_tool
                             args["debug"] = self.debug_mode
                             args["config_path"] = self.config_path
