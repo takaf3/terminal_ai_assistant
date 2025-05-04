@@ -184,7 +184,7 @@ The assistant comes with the following built-in tools:
    - Example: "Find the latest advancements in quantum computing"
    - Example: "Search only Wikipedia for information about the last Olympics"
 
-3. **web_search**: Search the web for information on a topic using Exa.ai (alternative search tool)
+3. **exa_search**: Search the web for information on a topic using Exa.ai (alternative search tool)
    - Example: "Use Exa to search for the latest news about AI"
    - Example: "What's the weather in London using Exa?"
 

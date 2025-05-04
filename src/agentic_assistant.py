@@ -249,7 +249,7 @@ class AgenticAssistant:
             self.tools.append({
                 "type": "function",
                 "function": {
-                    "name": "web_search",
+                    "name": "exa_search",
                     "description": "Search the web for information on a topic using Exa. Returns relevant search results.",
                     "parameters": {
                         "type": "object",
@@ -351,7 +351,7 @@ class AgenticAssistant:
             tools_description += "- memory_tool: Store and retrieve persistent information about the user such as facts, preferences, important dates, and world facts\n"
             tools_description += "- tavily_search: Search the web for information using Tavily Search with AI-generated summaries (preferred web search tool)\n"
             if self.has_exa_search:
-                tools_description += "- web_search: Search the web for information using Exa\n"
+                tools_description += "- exa_search: Search the web for information using Exa\n"
             if self.has_brave_search:
                 tools_description += "- brave_search: Search the web for information using Brave Search\n"
             
@@ -369,7 +369,7 @@ class AgenticAssistant:
                     "- Be concise in your responses\n"
                     "- When a tool is used, explain the results clearly\n"
                     "- When searching for information online, prefer using tavily_search as your default web search tool\n"
-                    "- Only use other search tools like web_search or brave_search if the user specifically requests them or if tavily_search is unavailable\n"
+                    "- Only use other search tools like exa_search or brave_search if the user specifically requests them or if tavily_search is unavailable\n"
                     "- You can use the python_repl tool to execute Python code for various tasks\n"
                     "- Through Python, you can run OS commands using libraries like subprocess or os\n"
                     "- You can create, read, and manipulate files using Python's file handling capabilities\n"
@@ -515,7 +515,7 @@ class AgenticAssistant:
                             yield f"\nTool result: {tool_result}\n"
                             full_response += f"\nTool result: {tool_result}\n"
                 
-                elif function_name == "web_search" and self.has_exa_search:
+                elif function_name == "exa_search" and self.has_exa_search:
                     # Parse arguments
                     try:
                         args = json.loads(tool_call["function"]["arguments"])
@@ -526,7 +526,7 @@ class AgenticAssistant:
                         num_results = 5
                     
                     # Emit tool start marker
-                    yield f"[TOOL_START]: web_search"
+                    yield f"[TOOL_START]: exa_search"
                     
                     # Perform web search
                     try:
