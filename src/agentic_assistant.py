@@ -367,6 +367,8 @@ class AgenticAssistant:
                     "- Always respond directly to the user's request\n"
                     "- Use tools only when needed\n"
                     "- Be concise in your responses\n"
+                    "- You can use multiple tools in sequence without waiting for user input\n"
+                    "- Chain tools together to solve complex tasks autonomously\n"
                     "- When a tool is used, explain the results clearly\n"
                     "- When searching for information online, prefer using tavily_search as your default web search tool\n"
                     "- Only use other search tools like exa_search or brave_search if the user specifically requests them or if tavily_search is unavailable\n"
@@ -401,314 +403,272 @@ class AgenticAssistant:
             # Start the streaming response
             full_response = ""
             current_tool_calls = []
+            has_output_first_chunk = False
             
-            # Make the API call
-            stream = self.client.chat.completions.create(**params)
+            # Loop for multi-turn autonomous execution
+            max_turns = 5  # Limit to prevent infinite loops
+            turn_count = 0
+            complete = False
             
-            # Process the streaming response
-            for chunk in stream:
-                # Handle content chunks
-                if chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
-                    full_response += content
-                    yield content
+            while not complete and turn_count < max_turns:
+                turn_count += 1
                 
-                # Handle tool calls in chunks
-                if chunk.choices[0].delta.tool_calls:
-                    for tc in chunk.choices[0].delta.tool_calls:
-                        # Initialize new tool calls
-                        if tc.index is not None:
-                            idx = tc.index
-                            while len(current_tool_calls) <= idx:
-                                current_tool_calls.append({
-                                    "id": "",
-                                    "function": {"name": "", "arguments": ""}
-                                })
-                            
-                            # Update the tool call ID
-                            if tc.id:
-                                current_tool_calls[idx]["id"] = tc.id
-                            
-                            # Update function information
-                            if tc.function:
-                                if tc.function.name:
-                                    current_tool_calls[idx]["function"]["name"] += tc.function.name
-                                if tc.function.arguments:
-                                    current_tool_calls[idx]["function"]["arguments"] += tc.function.arguments
-            
-            # After receiving all chunks, process any tool calls
-            for tool_call in current_tool_calls:
-                function_name = tool_call["function"]["name"]
+                # Make the API call
+                stream = self.client.chat.completions.create(**params)
                 
-                if function_name == "dice_roll":
-                    # Parse arguments
-                    try:
-                        args = json.loads(tool_call["function"]["arguments"])
-                        sides = args.get("sides", 6)
-                    except (json.JSONDecodeError, AttributeError):
-                        sides = 6
-                    
-                    # Emit tool start marker
-                    yield f"[TOOL_START]: dice_roll"
-                    
-                    # Roll the dice
-                    result = random.randint(1, sides)
-                    tool_result = f"Rolled a {result} on a {sides}-sided die."
-                    
-                    # Add a small delay to make the tool animation visible
-                    time.sleep(1.5)
-                    
-                    # Emit tool end marker
-                    yield f"[TOOL_END]"
-                    
-                    # Yield the tool result
-                    yield f"\nTool result: {tool_result}\n"
-                    full_response += f"\nTool result: {tool_result}\n"
+                # Process the streaming response
+                response_for_turn = ""
+                current_tool_calls = []
+                has_tool_calls = False
                 
-                elif function_name == "python_repl":
-                    # Parse arguments
-                    try:
-                        args = json.loads(tool_call["function"]["arguments"])
-                        code = args.get("code", "")
-                    except (json.JSONDecodeError, AttributeError):
-                        code = ""
+                for chunk in stream:
+                    # Handle content chunks
+                    if chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        response_for_turn += content
+                        full_response += content
+                        
+                        # Output the robot emoji prefix before the first chunk
+                        if not has_output_first_chunk:
+                            has_output_first_chunk = True
+                            yield "__STOP_ANIMATION__"
+                            yield "🤖 > "
+                        
+                        yield content
                     
-                    # If autopilot mode is enabled, skip approval
-                    if self.python_autopilot:
-                        # Emit tool start marker
-                        yield f"[TOOL_START]: python_repl"
-                        # Run the code
+                    # Handle tool calls in chunks
+                    if chunk.choices[0].delta.tool_calls:
+                        has_tool_calls = True
+                        for tc in chunk.choices[0].delta.tool_calls:
+                            # Initialize new tool calls
+                            if tc.index is not None:
+                                idx = tc.index
+                                while len(current_tool_calls) <= idx:
+                                    current_tool_calls.append({
+                                        "id": "",
+                                        "function": {"name": "", "arguments": ""}
+                                    })
+                                
+                                # Update the tool call ID
+                                if tc.id:
+                                    current_tool_calls[idx]["id"] = tc.id
+                                
+                                # Update function information
+                                if tc.function:
+                                    if tc.function.name:
+                                        current_tool_calls[idx]["function"]["name"] += tc.function.name
+                                    if tc.function.arguments:
+                                        current_tool_calls[idx]["function"]["arguments"] += tc.function.arguments
+                
+                # If there are no tool calls, we're done
+                if not has_tool_calls or not current_tool_calls:
+                    complete = True
+                    break
+                
+                # Process tool calls one by one
+                for tool_call in current_tool_calls:
+                    function_name = tool_call["function"]["name"]
+                    
+                    # Special handling for python_repl requiring user approval
+                    if function_name == "python_repl" and not self.python_autopilot:
                         try:
-                            repl_result = self.python_repl.run(code)
-                            tool_result = f"Python REPL output:\n{repl_result.strip()}"
-                        except Exception as e:
-                            tool_result = f"Python REPL error: {str(e)}"
-                        time.sleep(1.5)
-                        yield f"[TOOL_END]"
-                        yield f"\nTool result: {tool_result}\n"
-                        full_response += f"\nTool result: {tool_result}\n"
-                    else:
-                        # Normal approval flow
-                        # Stop thinking animation before approval prompt (handled in CLI)
+                            args = json.loads(tool_call["function"]["arguments"])
+                            code = args.get("code", "")
+                        except (json.JSONDecodeError, AttributeError):
+                            code = ""
+                        
                         yield "__STOP_ANIMATION__"
-                        # Ask user for approval BEFORE tool animation
                         print("\n" + "="*50)
                         print("[python_repl] The agent wants to run the following code:\n")
                         print(code)
                         print("\n" + "="*50)
                         approval = input("\033[93mApprove running this code? [Y/n]: \033[0m").strip().lower()
-                        if approval not in ("", "y", "yes"):  # User did not approve
+                        
+                        if approval not in ("", "y", "yes"):
                             tool_result = "\033[91m[python_repl] Execution cancelled by user.\033[0m"
-                            yield f"\n{tool_result}\n"
-                            full_response += f"\n{tool_result}\n"
-                        else:
-                            # Emit tool start marker only if approved
-                            yield f"[TOOL_START]: python_repl"
-                            # Run the code
-                            try:
-                                repl_result = self.python_repl.run(code)
-                                tool_result = f"Python REPL output:\n{repl_result.strip()}"
-                            except Exception as e:
-                                tool_result = f"Python REPL error: {str(e)}"
-                            time.sleep(1.5)
-                            yield f"[TOOL_END]"
                             yield f"\nTool result: {tool_result}\n"
                             full_response += f"\nTool result: {tool_result}\n"
-                
-                elif function_name == "exa_search" and self.has_exa_search:
-                    # Parse arguments
-                    try:
-                        args = json.loads(tool_call["function"]["arguments"])
-                        query = args.get("query", "")
-                        num_results = args.get("num_results", 5)
-                    except (json.JSONDecodeError, AttributeError):
-                        query = "error parsing query"
-                        num_results = 5
-                    
-                    # Emit tool start marker
-                    yield f"[TOOL_START]: exa_search"
-                    
-                    # Perform web search
-                    try:
-                        search_results = self.exa_client.search(query, num_results=num_results)
-                        formatted_results = self.exa_client.format_results(search_results)
-                        tool_result = f"Exa web search results for '{query}':\n\n{formatted_results}"
-                    except Exception as e:
-                        tool_result = f"Error performing Exa web search: {str(e)}"
-                    
-                    # Add a small delay to make the tool animation visible
-                    time.sleep(1.5)
-                    
-                    # Emit tool end marker
-                    yield f"[TOOL_END]"
-                    
-                    # Yield the tool result
-                    yield f"\nTool result: {tool_result}\n"
-                    full_response += f"\nTool result: {tool_result}\n"
-                
-                elif function_name == "brave_search" and self.has_brave_search:
-                    # Parse arguments
-                    try:
-                        args = json.loads(tool_call["function"]["arguments"])
-                        query = args.get("query", "")
-                        count = args.get("count", 5)
-                    except (json.JSONDecodeError, AttributeError):
-                        query = "error parsing query"
-                        count = 5
-                    
-                    # Emit tool start marker
-                    yield f"[TOOL_START]: brave_search"
-                    
-                    # Perform brave search
-                    try:
-                        search_results = self.brave_client.search(query, count=count)
-                        formatted_results = self.brave_client.format_results(search_results)
-                        tool_result = f"Brave Search results for '{query}':\n\n{formatted_results}"
-                    except Exception as e:
-                        tool_result = f"Error performing Brave Search: {str(e)}"
-                    
-                    # Add a small delay to make the tool animation visible
-                    time.sleep(1.5)
-                    
-                    # Emit tool end marker
-                    yield f"[TOOL_END]"
-                    
-                    # Yield the tool result
-                    yield f"\nTool result: {tool_result}\n"
-                    full_response += f"\nTool result: {tool_result}\n"
-                
-                elif function_name == "tavily_search" and self.has_tavily_search:
-                    # Parse arguments
-                    try:
-                        args = json.loads(tool_call["function"]["arguments"])
-                        query = args.get("query", "")
-                        max_results = args.get("max_results", 5)
-                        include_domains = args.get("include_domains", [])
-                        exclude_domains = args.get("exclude_domains", [])
-                    except (json.JSONDecodeError, AttributeError):
-                        query = "error parsing query"
-                        max_results = 5
-                        include_domains = []
-                        exclude_domains = []
-                    
-                    # Emit tool start marker
-                    yield f"[TOOL_START]: tavily_search"
-                    
-                    # Perform tavily search
-                    try:
-                        search_results = self.tavily_client.search(query, max_results=max_results, include_domains=include_domains, exclude_domains=exclude_domains)
-                        formatted_results = self.tavily_client.format_results(search_results)
-                        tool_result = f"Tavily Search results for '{query}':\n\n{formatted_results}"
-                    except Exception as e:
-                        tool_result = f"Error performing Tavily Search: {str(e)}"
-                    
-                    # Add a small delay to make the tool animation visible
-                    time.sleep(1.5)
-                    
-                    # Emit tool end marker
-                    yield f"[TOOL_END]"
-                    
-                    # Yield the tool result
-                    yield f"\nTool result: {tool_result}\n"
-                    full_response += f"\nTool result: {tool_result}\n"
-                
-                elif function_name == "memory_tool":
-                    # Parse arguments
-                    try:
-                        args = json.loads(tool_call["function"]["arguments"])
-                        operation = args.get("operation", "")
+                            # Set complete flag since we need user input
+                            complete = True
+                            break
+                            
+                        yield f"[TOOL_START]: python_repl"
+                        try:
+                            repl_result = self.python_repl.run(code)
+                            tool_result = f"Python REPL output:\n{repl_result.strip()}"
+                        except Exception as e:
+                            tool_result = f"Python REPL error: {str(e)}"
                         
-                        # Build kwargs based on the operation
-                        kwargs = {}
-                        if operation == "add_fact":
-                            kwargs["fact"] = args.get("fact", "")
-                        elif operation == "add_preference":
-                            kwargs["category"] = args.get("category", "")
-                            kwargs["key"] = args.get("key", "")
-                            kwargs["value"] = args.get("value", "")
-                        elif operation == "add_date":
-                            kwargs["description"] = args.get("description", "")
-                            kwargs["date"] = args.get("date", "")
-                        elif operation == "add_world_fact":
-                            kwargs["world_fact"] = args.get("world_fact", "")
-                        elif operation == "search":
-                            kwargs["query"] = args.get("query", "")
-                    except (json.JSONDecodeError, AttributeError) as e:
-                        operation = "error"
-                        kwargs = {}
-                        error_msg = str(e)
-                    
-                    # Emit tool start marker
-                    yield f"[TOOL_START]: memory_tool ({operation})"
-                    
-                    # Call the memory tool
-                    try:
-                        result = memory_tool(operation, **kwargs)
+                        yield f"[TOOL_END]"
+                        yield f"\nTool result: {tool_result}\n"
+                        full_response += f"\nTool result: {tool_result}\n"
                         
-                        if operation == "get":
-                            # Format the memory data for better readability
-                            formatted_memory = json.dumps(result, indent=2)
-                            tool_result = f"Current memory contents:\n\n{formatted_memory}"
-                        elif operation == "search":
-                            if "error" in result:
-                                tool_result = f"Memory search error: {result['error']}"
-                            else:
-                                # Format search results
-                                if not result.get("results"):
-                                    tool_result = "No results found in memory for the query."
-                                else:
-                                    formatted_results = "\n".join([f"- {r_type}: {r_content}" for r_type, r_content in result.get("results", [])])
-                                    tool_result = f"Memory search results:\n\n{formatted_results}"
-                        else:
-                            # For all other operations
+                        # Need to break out of the autonomous loop after Python interaction
+                        complete = True
+                        break
+                    
+                    # For non-Python tools or Python in autopilot mode
+                    if function_name == "dice_roll":
+                        try:
+                            args = json.loads(tool_call["function"]["arguments"])
+                            sides = args.get("sides", 6)
+                        except (json.JSONDecodeError, AttributeError):
+                            sides = 6
+                        
+                        yield f"[TOOL_START]: dice_roll"
+                        result = random.randint(1, sides)
+                        tool_result = f"Rolled a {result} on a {sides}-sided die."
+                        time.sleep(1.5)
+                        yield f"[TOOL_END]"
+                        yield f"\nTool result: {tool_result}\n"
+                        full_response += f"\nTool result: {tool_result}\n"
+                    
+                    elif function_name == "python_repl" and self.python_autopilot:
+                        try:
+                            args = json.loads(tool_call["function"]["arguments"])
+                            code = args.get("code", "")
+                        except (json.JSONDecodeError, AttributeError):
+                            code = ""
+                        
+                        yield f"[TOOL_START]: python_repl"
+                        try:
+                            repl_result = self.python_repl.run(code)
+                            tool_result = f"Python REPL output:\n{repl_result.strip()}"
+                        except Exception as e:
+                            tool_result = f"Python REPL error: {str(e)}"
+                        
+                        time.sleep(1.5)
+                        yield f"[TOOL_END]"
+                        yield f"\nTool result: {tool_result}\n"
+                        full_response += f"\nTool result: {tool_result}\n"
+                    
+                    elif function_name == "memory_tool":
+                        try:
+                            args = json.loads(tool_call["function"]["arguments"])
+                            operation = args.get("operation", "")
+                            
+                            # Build kwargs based on the operation
+                            kwargs = {}
+                            if operation == "add_fact":
+                                kwargs["fact"] = args.get("fact", "")
+                            elif operation == "add_preference":
+                                kwargs["category"] = args.get("category", "")
+                                kwargs["key"] = args.get("key", "")
+                                kwargs["value"] = args.get("value", "")
+                            elif operation == "add_date":
+                                kwargs["description"] = args.get("description", "")
+                                kwargs["date"] = args.get("date", "")
+                            elif operation == "add_world_fact":
+                                kwargs["world_fact"] = args.get("world_fact", "")
+                            elif operation == "search":
+                                kwargs["query"] = args.get("query", "")
+                        except (json.JSONDecodeError, AttributeError) as e:
+                            operation = "error"
+                            kwargs = {}
+                        
+                        yield f"[TOOL_START]: memory_tool ({operation})"
+                        try:
+                            result = memory_tool(operation, **kwargs)
                             if "error" in result:
                                 tool_result = f"Memory operation error: {result['error']}"
+                            elif operation == "get":
+                                formatted_memory = json.dumps(result, indent=2)
+                                tool_result = f"Current memory contents:\n\n{formatted_memory}"
+                            elif operation == "search":
+                                if "message" in result:
+                                    tool_result = result["message"]
+                                else:
+                                    tool_result = "Memory search completed."
                             else:
                                 tool_result = result.get("message", "Operation completed.")
-                    except Exception as e:
-                        tool_result = f"Error executing memory tool: {str(e)}"
+                        except Exception as e:
+                            tool_result = f"Error executing memory tool: {str(e)}"
+                        
+                        time.sleep(1.5)
+                        yield f"[TOOL_END]"
+                        yield f"\nTool result: {tool_result}\n"
+                        full_response += f"\nTool result: {tool_result}\n"
                     
-                    # Add a small delay to make the tool animation visible
-                    time.sleep(1.5)
+                    elif function_name == "exa_search" and self.has_exa_search:
+                        try:
+                            args = json.loads(tool_call["function"]["arguments"])
+                            query = args.get("query", "")
+                            num_results = args.get("num_results", 5)
+                        except (json.JSONDecodeError, AttributeError):
+                            query = "error parsing query"
+                            num_results = 5
+                        
+                        yield f"[TOOL_START]: exa_search"
+                        try:
+                            search_results = self.exa_client.search(query, num_results=num_results)
+                            formatted_results = self.exa_client.format_results(search_results)
+                            tool_result = f"Exa web search results for '{query}':\n\n{formatted_results}"
+                        except Exception as e:
+                            tool_result = f"Error performing Exa web search: {str(e)}"
+                        
+                        time.sleep(1.5)
+                        yield f"[TOOL_END]"
+                        yield f"\nTool result: {tool_result}\n"
+                        full_response += f"\nTool result: {tool_result}\n"
                     
-                    # Emit tool end marker
-                    yield f"[TOOL_END]"
+                    elif function_name == "brave_search" and self.has_brave_search:
+                        try:
+                            args = json.loads(tool_call["function"]["arguments"])
+                            query = args.get("query", "")
+                            count = args.get("count", 5)
+                        except (json.JSONDecodeError, AttributeError):
+                            query = "error parsing query"
+                            count = 5
+                        
+                        yield f"[TOOL_START]: brave_search"
+                        try:
+                            search_results = self.brave_client.search(query, count=count)
+                            formatted_results = self.brave_client.format_results(search_results)
+                            tool_result = f"Brave Search results for '{query}':\n\n{formatted_results}"
+                        except Exception as e:
+                            tool_result = f"Error performing Brave Search: {str(e)}"
+                        
+                        time.sleep(1.5)
+                        yield f"[TOOL_END]"
+                        yield f"\nTool result: {tool_result}\n"
+                        full_response += f"\nTool result: {tool_result}\n"
                     
-                    # Yield the tool result
-                    yield f"\nTool result: {tool_result}\n"
-                    full_response += f"\nTool result: {tool_result}\n"
+                    elif function_name == "tavily_search" and self.has_tavily_search:
+                        try:
+                            args = json.loads(tool_call["function"]["arguments"])
+                            query = args.get("query", "")
+                            max_results = args.get("max_results", 5)
+                            include_domains = args.get("include_domains", [])
+                            exclude_domains = args.get("exclude_domains", [])
+                        except (json.JSONDecodeError, AttributeError):
+                            query = "error parsing query"
+                            max_results = 5
+                            include_domains = []
+                            exclude_domains = []
+                        
+                        yield f"[TOOL_START]: tavily_search"
+                        try:
+                            search_results = self.tavily_client.search(query, max_results=max_results, include_domains=include_domains, exclude_domains=exclude_domains)
+                            formatted_results = self.tavily_client.format_results(search_results)
+                            tool_result = f"Tavily Search results for '{query}':\n\n{formatted_results}"
+                        except Exception as e:
+                            tool_result = f"Error performing Tavily Search: {str(e)}"
+                        
+                        time.sleep(1.5)
+                        yield f"[TOOL_END]"
+                        yield f"\nTool result: {tool_result}\n"
+                        full_response += f"\nTool result: {tool_result}\n"
                 
-                # Create a follow-up with the tool result
-                follow_up_messages = messages_to_send + [
-                    {"role": "assistant", "content": full_response, "tool_calls": [
-                        {"id": tool_call["id"], "type": "function", "function": {
-                            "name": function_name, 
-                            "arguments": tool_call["function"]["arguments"]
-                        }}
-                    ]},
-                    {"role": "tool", "tool_call_id": tool_call["id"], "name": function_name, "content": tool_result}
-                ]
-                
-                # Make a follow-up API call to let the model respond to the tool result
-                follow_up_params = {
-                    "model": self.llm_model,
-                    "messages": follow_up_messages,
-                    "stream": True
-                }
-                
-                if is_reasoning_model(self.llm_model):
-                    follow_up_params["max_completion_tokens"] = self.llm_max_completion_tokens
-                else:
-                    follow_up_params["temperature"] = self.llm_temperature
-                    follow_up_params["max_tokens"] = self.llm_max_tokens
-                
-                # Stream the follow-up response
-                follow_up_stream = self.client.chat.completions.create(**follow_up_params)
-                for chunk in follow_up_stream:
-                    if chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        full_response += content
-                        yield content
+                # If we should continue with another turn, update the messages
+                if not complete:
+                    # Append the full conversation so far
+                    messages_to_send = [system_message] + formatted_history + [
+                        {"role": "user", "content": user_input},
+                        {"role": "assistant", "content": full_response}
+                    ]
+                    
+                    # Update params with new messages
+                    params["messages"] = messages_to_send
             
             # Add to memory for next conversation turn
             self.memory.add_user_message(user_input)
@@ -721,6 +681,8 @@ class AgenticAssistant:
         except Exception as e:
             error_message = f"[Agent Error] {str(e)}"
             yield error_message
+            import traceback
+            print(f"EXCEPTION: {traceback.format_exc()}", file=sys.stderr)
             self.memory.add_user_message(user_input)
             self.memory.add_ai_message(error_message)
             self.add_memory_observations("user", [user_input])
