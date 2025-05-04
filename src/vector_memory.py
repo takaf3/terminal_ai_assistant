@@ -34,13 +34,16 @@ class VectorMemory:
         if persist_directory is None:
             # Use config value if available
             if self.config.get("memory", {}).get("persist_directory"):
-                self.persist_directory = self.config["memory"]["persist_directory"]
+                # Ensure we expand the ~ to user's home directory if it's in the path
+                config_path = self.config["memory"]["persist_directory"]
+                self.persist_directory = os.path.expanduser(config_path)
             else:
                 # Default to ~/.terminal_assistant/vector_memory
                 home_dir = os.path.expanduser("~")
                 self.persist_directory = os.path.join(home_dir, ".terminal_assistant", "vector_memory")
         else:
-            self.persist_directory = persist_directory
+            # Ensure we expand the ~ if it's in the provided path
+            self.persist_directory = os.path.expanduser(persist_directory)
             
         if self.debug:
             print(f"[DEBUG] Using vector memory persist directory: {self.persist_directory}")
