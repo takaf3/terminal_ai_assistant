@@ -142,7 +142,7 @@ def main():
 
     while True:
         try:
-            pretty_prompt = [("class:prompt", "🤖 What's up?: ")]
+            pretty_prompt = [("class:prompt", "👤 > ")]
             prompt_style = Style.from_dict({"prompt": ""})
             user_input = prompt(pretty_prompt, style=prompt_style)
         except (EOFError, KeyboardInterrupt):
@@ -236,6 +236,8 @@ def main():
                     animation_thread.join()
                     animation_thread = None
                     first_chunk_received = True
+                    # Add robot emoji prefix for first chunk of agent response
+                    print("🤖 > ", end='', flush=True)
                 
                 # Print the chunk content
                 if chunk.startswith("\nTool result:"):
