@@ -121,25 +121,84 @@ def search_memory(query):
     # Convert query to lowercase for case-insensitive search
     query_lower = query.lower()
     
+    # Special handling for common queries
+    is_name_query = any(term in query_lower for term in ["name", "call me", "who am i"])
+    is_birthday_query = any(term in query_lower for term in ["birthday", "born", "birth date"])
+    is_preference_query = any(term in query_lower for term in ["like", "prefer", "favorite", "preference"])
+    
+    # Extract keywords from query
+    keywords = [word.strip() for word in query_lower.split() if len(word.strip()) > 2]
+    
     # Search user facts
     for fact in memory["user_facts"]:
-        if query_lower in fact["fact"].lower():
+        fact_lower = fact["fact"].lower()
+        
+        # Direct match
+        if query_lower in fact_lower:
             results.append(("User fact", fact["fact"]))
+            continue
+            
+        # Special case for name queries
+        if is_name_query and any(name_word in fact_lower for name_word in ["name", "call", "called"]):
+            results.append(("User fact", fact["fact"]))
+            continue
+            
+        # Keyword matching
+        if any(keyword in fact_lower for keyword in keywords):
+            results.append(("User fact", fact["fact"]))
+            continue
     
     # Search world facts
     for fact in memory["world_facts"]:
-        if query_lower in fact["fact"].lower():
+        fact_lower = fact["fact"].lower()
+        
+        # Direct match
+        if query_lower in fact_lower:
+            results.append(("World fact", fact["fact"]))
+            continue
+            
+        # Keyword matching
+        if any(keyword in fact_lower for keyword in keywords):
             results.append(("World fact", fact["fact"]))
     
     # Search user preferences
     for category, prefs in memory["preferences"].items():
         for key, value in prefs.items():
-            if query_lower in str(value).lower() or query_lower in key.lower():
+            pref_text = f"{category}: {key} = {value}".lower()
+            
+            # Direct match
+            if query_lower in pref_text:
+                results.append(("Preference", f"{category}: {key} = {value}"))
+                continue
+                
+            # Special case for preference queries
+            if is_preference_query and (
+                any(keyword in key.lower() for keyword in keywords) or 
+                any(keyword in str(value).lower() for keyword in keywords)
+            ):
+                results.append(("Preference", f"{category}: {key} = {value}"))
+                continue
+            
+            # Keyword matching
+            if any(keyword in pref_text for keyword in keywords):
                 results.append(("Preference", f"{category}: {key} = {value}"))
     
     # Search important dates
     for desc, date_info in memory["history"]["important_dates"].items():
-        if query_lower in desc.lower() or query_lower in date_info["date"].lower():
+        date_text = f"{desc}: {date_info['date']}".lower()
+        
+        # Direct match
+        if query_lower in date_text:
+            results.append(("Important date", f"{desc}: {date_info['date']}"))
+            continue
+            
+        # Special case for birthday queries
+        if is_birthday_query and "birthday" in desc.lower():
+            results.append(("Important date", f"{desc}: {date_info['date']}"))
+            continue
+            
+        # Keyword matching
+        if any(keyword in date_text for keyword in keywords):
             results.append(("Important date", f"{desc}: {date_info['date']}"))
     
     return results
@@ -195,9 +254,15 @@ def memory_tool(operation, **kwargs):
         results = search_memory(query)
         
         if not results:
-            return {"success": True, "message": "No results found for the query", "results": []}
+            return {"success": True, "message": "No results found in memory for the query.", "results": []}
         
-        return {"success": True, "message": f"Found {len(results)} matches", "results": results}
+        # Format results more clearly
+        formatted_results = "\n".join([f"- {category}: {details}" for category, details in results])
+        return {
+            "success": True, 
+            "message": f"Memory search results:\n\n{formatted_results}", 
+            "results": results
+        }
     
     else:
         return {"error": f"Unknown operation: {operation}"} 
