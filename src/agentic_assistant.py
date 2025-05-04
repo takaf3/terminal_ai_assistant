@@ -363,6 +363,7 @@ class AgenticAssistant:
                     "You are a helpful and friendly personal AI assistant. "
                     "Be concise and informative in your responses. "
                     f"The current time is {current_time_str}.\n\n"
+                    "Always use metric units (meters, kilograms, Celsius) instead of imperial units (feet, pounds, Fahrenheit).\n\n"
                     "You have access to the following tools:\n"
                     f"{tools_description}\n"
                     "INSTRUCTIONS:\n"
