@@ -99,6 +99,8 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     parser.add_argument("--autopilot", action="store_true", help="Enable autopilot mode (runs Python code without approval)")
     parser.add_argument("--config", metavar="CONFIG_FILE", help="Path to custom config file (default: ./config.yaml)")
+    parser.add_argument("-m", "--model", help="Model ID to use (overrides config file and environment variables)")
+    parser.add_argument("-b", "--base-url", help="API base URL to use (overrides config file and environment variables)")
     args = parser.parse_args()
     
     # Load configuration from specified or default config file
@@ -108,7 +110,15 @@ def main():
     if args.debug or config["debug"]:
         os.environ["DEBUG"] = "true"
         cprint("Debug mode enabled.", "yellow")
-    
+
+    # Display model override notification if specified
+    if args.model:
+        cprint(f"Model override: Using model '{args.model}'", "yellow")
+
+    # Display base URL override notification if specified
+    if args.base_url:
+        cprint(f"Base URL override: Using API base URL '{args.base_url}'", "yellow")
+
     # Initialize autopilot mode from command line argument or config
     autopilot_mode = args.autopilot or config["python_autopilot"]
     if autopilot_mode:
@@ -122,7 +132,8 @@ def main():
     
     try:
         from src.agentic_assistant import AgenticAssistant
-        assistant = AgenticAssistant(python_autopilot=autopilot_mode, config_path=args.config)
+        assistant = AgenticAssistant(python_autopilot=autopilot_mode, config_path=args.config, 
+                                    model_override=args.model, base_url_override=args.base_url)
     except ValueError as e:
         cprint(f"\nERROR: {str(e)}", "red")
         sys.exit(1)

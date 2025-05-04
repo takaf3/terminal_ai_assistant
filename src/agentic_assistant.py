@@ -55,7 +55,7 @@ def is_reasoning_model(model_name: str) -> bool:
     )
 
 class AgenticAssistant:
-    def __init__(self, python_autopilot=False, config_path=None):
+    def __init__(self, python_autopilot=False, config_path=None, model_override=None, base_url_override=None):
         # Load configuration from config.yaml if exists
         self.config = load_config(config_path)
         
@@ -102,8 +102,8 @@ class AgenticAssistant:
         # Modern LangChain memory usage: use BaseChatMessageHistory instead of ConversationBufferMemory
         self.memory = ChatMessageHistory()
         # LLM configuration from config
-        self.llm_base_url = self.config["llm"]["base_url"]
-        self.llm_model = self.config["llm"]["model"]
+        self.llm_base_url = base_url_override if base_url_override else self.config["llm"]["base_url"]
+        self.llm_model = model_override if model_override else self.config["llm"]["model"]
         self.llm_api_key = self.config["llm"]["api_key"] or os.environ.get("OPENAI_API_KEY")
         self.llm_temperature = self.config["llm"]["temperature"]
         self.llm_max_tokens = self.config["llm"]["max_tokens"]
