@@ -507,10 +507,6 @@ class AgenticAssistant:
                         yield f"[TOOL_END]"
                         yield f"\nTool result: {tool_result}\n"
                         full_response += f"\nTool result: {tool_result}\n"
-                        
-                        # Need to break out of the autonomous loop after Python interaction
-                        complete = True
-                        break
                     
                     # For non-Python tools or Python in autopilot mode
                     if function_name == "dice_roll":
