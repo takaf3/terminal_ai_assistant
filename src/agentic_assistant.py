@@ -383,6 +383,7 @@ class AgenticAssistant:
                     "- Use the memory_tool to remember important facts about the user, their preferences, important dates, and general facts about the world\n"
                     "- The memory system uses a vector database (ChromaDB) for semantic search, allowing you to find related information even when queries don't exactly match stored information\n"
                     "- Before asking for information the user has already shared, check the memory using memory_tool with 'search' operation to find semantically similar information\n"
+                    "- **IMPORTANT**: If the user asks a question that seems to require personal context (e.g., 'What's the weather like?' without specifying a location), **first** use the 'memory_tool' with the 'search' operation to see if relevant facts (like their location) are stored. Only ask for clarification if the information isn't found in memory.\n"
                     "- When the user shares important information, always use memory_tool to store it for future reference"
                 )
             }
